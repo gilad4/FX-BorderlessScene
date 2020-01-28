@@ -3,10 +3,11 @@
  */
 package com.goxr3plus.fxborderlessscene.borderless;
 
+import java.util.Optional;
+
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
-import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
@@ -269,8 +270,11 @@ public class BorderlessController {
 					if (m.getScreenY() > eventSource.y) {
 						snapOff();
 					} else {
-						Rectangle2D screen = Screen.getScreensForRectangle(m.getScreenX(), m.getScreenY(), 1, 1).get(0).getVisualBounds();
-						stage.setHeight(screen.getHeight());
+						Optional<Screen> screenOpt = getScreenByPoint(m.getScreenX(), m.getScreenY());
+						if (!screenOpt.isPresent()) {
+							return;
+						}
+						stage.setHeight(screenOpt.get().getVisualBounds().getHeight());
 					}
 				} else {
 					// Move y axis.
@@ -290,11 +294,11 @@ public class BorderlessController {
 				} else {
 					//--------------------------Check here for Transparent Window--------------------------
 					//Rectangle2D wholeScreen = Screen.getScreensForRectangle(m.getScreenX(), m.getScreenY(), 1, 1).get(0).getBounds()
-					ObservableList<Screen> screens = Screen.getScreensForRectangle(m.getScreenX(), m.getScreenY(), 1, 1);
-					if (screens.isEmpty()) {
+					Optional<Screen> screenOpt = getScreenByPoint(m.getScreenX(), m.getScreenY());
+					if (!screenOpt.isPresent()) {
 						return;
 					}
-					Rectangle2D screen = screens.get(0).getVisualBounds();
+					Rectangle2D screen = screenOpt.get().getVisualBounds();
 
 					//----------TO BE ADDED IN FUTURE RELEASE , GAVE ME CANCER implementing them ..----------------
 
@@ -420,7 +424,11 @@ public class BorderlessController {
 				}
 
 				if ((MouseButton.PRIMARY.equals(m.getButton())) && (m.getScreenX() != eventSource.x)) {
-					Rectangle2D screen = Screen.getScreensForRectangle(m.getScreenX(), m.getScreenY(), 1, 1).get(0).getVisualBounds();
+					Optional<Screen> screenOpt = getScreenByPoint(m.getScreenX(), m.getScreenY());
+					if (!screenOpt.isPresent()) {
+						return;
+					}
+					Rectangle2D screen = screenOpt.get().getVisualBounds();
 
 					// Aero Snap Left.
 					if (m.getScreenX() <= screen.getMinX()) {
@@ -569,7 +577,11 @@ public class BorderlessController {
 		// Aero Snap Resize.
 		pane.setOnMouseReleased(m -> {
 			if ((MouseButton.PRIMARY.equals(m.getButton())) && (!snapped)) {
-				Rectangle2D screen = Screen.getScreensForRectangle(m.getScreenX(), m.getScreenY(), 1, 1).get(0).getVisualBounds();
+				Optional<Screen> screenOpt = getScreenByPoint(m.getScreenX(), m.getScreenY());
+				if (!screenOpt.isPresent()) {
+					return;
+				}
+				Rectangle2D screen = screenOpt.get().getVisualBounds();
 
 				if ((stage.getY() <= screen.getMinY()) && (direction.startsWith("top"))) {
 					stage.setHeight(screen.getHeight());
@@ -589,7 +601,11 @@ public class BorderlessController {
 		// Aero Snap resize on double click.
 		pane.setOnMouseClicked(m -> {
 			if ((MouseButton.PRIMARY.equals(m.getButton())) && (m.getClickCount() == 2) && ("top".equals(direction) || bottom.equals(direction))) {
-				Rectangle2D screen = Screen.getScreensForRectangle(stage.getX(), stage.getY(), stage.getWidth() / 2, stage.getHeight() / 2).get(0).getVisualBounds();
+				Optional<Screen> screenOpt = getScreenByRectangle(stage.getX(), stage.getY(), stage.getWidth() / 2, stage.getHeight() / 2);
+				if (!screenOpt.isPresent()) {
+					return;
+				}
+				Rectangle2D screen = screenOpt.get().getVisualBounds();
 
 				if (snapped) {
 					stage.setHeight(prevSize.y);
@@ -605,6 +621,14 @@ public class BorderlessController {
 			}
 
 		});
+	}
+
+	private Optional<Screen> getScreenByRectangle(double x, double y, double width, double height) {
+		return Screen.getScreensForRectangle(x, y, width, height).stream().findFirst();
+	}
+
+	private Optional<Screen> getScreenByPoint(double x, double y) {
+		return getScreenByRectangle(x, y, 1, 1);
 	}
 
 	/**
