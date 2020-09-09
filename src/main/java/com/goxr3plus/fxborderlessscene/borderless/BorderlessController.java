@@ -184,41 +184,40 @@ public class BorderlessController {
 			else
 				screen = Screen.getScreensForRectangle(stage.getX(), stage.getY(), stage.getWidth() / 2, stage.getHeight() / 2).get(0).getVisualBounds();
 
-		} catch (Exception ex) {
-			ex.printStackTrace();
-			return;
-		}
+			if (maximized.get()) {
+				stage.setWidth(prevSize.x);
+				stage.setHeight(prevSize.y);
+				stage.setX(prevPos.x);
+				stage.setY(prevPos.y);
+				setMaximized(false);
+			} else {
+				// Record position and size, and maximize.
+				if (!snapped) {
+					prevSize.x = stage.getWidth();
+					prevSize.y = stage.getHeight();
+					prevPos.x = stage.getX();
+					prevPos.y = stage.getY();
+				} else if (!screen.contains(prevPos.x, prevPos.y)) {
+					if (prevSize.x > screen.getWidth())
+						prevSize.x = screen.getWidth() - 20;
 
-		if (maximized.get()) {
-			stage.setWidth(prevSize.x);
-			stage.setHeight(prevSize.y);
-			stage.setX(prevPos.x);
-			stage.setY(prevPos.y);
-			setMaximized(false);
-		} else {
-			// Record position and size, and maximize.
-			if (!snapped) {
-				prevSize.x = stage.getWidth();
-				prevSize.y = stage.getHeight();
-				prevPos.x = stage.getX();
-				prevPos.y = stage.getY();
-			} else if (!screen.contains(prevPos.x, prevPos.y)) {
-				if (prevSize.x > screen.getWidth())
-					prevSize.x = screen.getWidth() - 20;
+					if (prevSize.y > screen.getHeight())
+						prevSize.y = screen.getHeight() - 20;
 
-				if (prevSize.y > screen.getHeight())
-					prevSize.y = screen.getHeight() - 20;
+					prevPos.x = screen.getMinX() + (screen.getWidth() - prevSize.x) / 2;
+					prevPos.y = screen.getMinY() + (screen.getHeight() - prevSize.y) / 2;
+				}
 
-				prevPos.x = screen.getMinX() + (screen.getWidth() - prevSize.x) / 2;
-				prevPos.y = screen.getMinY() + (screen.getHeight() - prevSize.y) / 2;
+				stage.setX(screen.getMinX());
+				stage.setY(screen.getMinY());
+				stage.setWidth(screen.getWidth());
+				stage.setHeight(screen.getHeight());
+
+				setMaximized(true);
 			}
 
-			stage.setX(screen.getMinX());
-			stage.setY(screen.getMinY());
-			stage.setWidth(screen.getWidth());
-			stage.setHeight(screen.getHeight());
-
-			setMaximized(true);
+		} catch (Exception ex) {
+			ex.printStackTrace();
 		}
 	}
 
@@ -240,184 +239,195 @@ public class BorderlessController {
 
 		// Record drag deltas on press.
 		node.setOnMousePressed(m -> {
-			if (m.isPrimaryButtonDown()) {
-				delta.x = m.getSceneX(); //getX()
-				delta.y = m.getSceneY(); //getY()
+			try {
+				if (m.isPrimaryButtonDown()) {
+					delta.x = m.getSceneX(); //getX()
+					delta.y = m.getSceneY(); //getY()
 
-				if (maximized.get() || snapped) {
-					delta.x = prevSize.x * (m.getSceneX() / stage.getWidth());//(m.getX() / stage.getWidth())
-					delta.y = prevSize.y * (m.getSceneY() / stage.getHeight());//(m.getY() / stage.getHeight())
-				} else {
-					prevSize.x = stage.getWidth();
-					prevSize.y = stage.getHeight();
-					prevPos.x = stage.getX();
-					prevPos.y = stage.getY();
+					if (maximized.get() || snapped) {
+						delta.x = prevSize.x * (m.getSceneX() / stage.getWidth());//(m.getX() / stage.getWidth())
+						delta.y = prevSize.y * (m.getSceneY() / stage.getHeight());//(m.getY() / stage.getHeight())
+					} else {
+						prevSize.x = stage.getWidth();
+						prevSize.y = stage.getHeight();
+						prevPos.x = stage.getX();
+						prevPos.y = stage.getY();
+					}
+
+					eventSource.x = m.getScreenX();
+					eventSource.y = node.prefHeight(stage.getHeight());
 				}
-
-				eventSource.x = m.getScreenX();
-				eventSource.y = node.prefHeight(stage.getHeight());
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
 		});
 
 		// Dragging moves the application around.
 		node.setOnMouseDragged(m -> {
-			if (m.isPrimaryButtonDown()) {
+			try {
+				if (m.isPrimaryButtonDown()) {
 
-				// Move x axis.
-				stage.setX(m.getScreenX() - delta.x);
+					// Move x axis.
+					stage.setX(m.getScreenX() - delta.x);
 
-				if (snapped) {
-					if (m.getScreenY() > eventSource.y) {
-						snapOff();
+					if (snapped) {
+						if (m.getScreenY() > eventSource.y) {
+							snapOff();
+						} else {
+							Optional<Screen> screenOpt = getScreenByPoint(m.getScreenX(), m.getScreenY());
+							if (!screenOpt.isPresent()) {
+								return;
+							}
+							stage.setHeight(screenOpt.get().getVisualBounds().getHeight());
+						}
 					} else {
+						// Move y axis.
+						stage.setY(m.getScreenY() - delta.y);
+					}
+
+					// Aero Snap off.
+					if (maximized.get()) {
+						stage.setWidth(prevSize.x);
+						stage.setHeight(prevSize.y);
+						setMaximized(false);
+					}
+
+					boolean toCloseWindow = false;
+					if (!snap.get()) {
+						toCloseWindow = true;
+					} else {
+						//--------------------------Check here for Transparent Window--------------------------
+						//Rectangle2D wholeScreen = Screen.getScreensForRectangle(m.getScreenX(), m.getScreenY(), 1, 1).get(0).getBounds()
 						Optional<Screen> screenOpt = getScreenByPoint(m.getScreenX(), m.getScreenY());
 						if (!screenOpt.isPresent()) {
 							return;
 						}
-						stage.setHeight(screenOpt.get().getVisualBounds().getHeight());
-					}
-				} else {
-					// Move y axis.
-					stage.setY(m.getScreenY() - delta.y);
-				}
+						Rectangle2D screen = screenOpt.get().getVisualBounds();
 
-				// Aero Snap off.
-				if (maximized.get()) {
-					stage.setWidth(prevSize.x);
-					stage.setHeight(prevSize.y);
-					setMaximized(false);
-				}
+						//----------TO BE ADDED IN FUTURE RELEASE , GAVE ME CANCER implementing them ..----------------
 
-				boolean toCloseWindow = false;
-				if (!snap.get()) {
-					toCloseWindow = true;
-				} else {
-					//--------------------------Check here for Transparent Window--------------------------
-					//Rectangle2D wholeScreen = Screen.getScreensForRectangle(m.getScreenX(), m.getScreenY(), 1, 1).get(0).getBounds()
-					Optional<Screen> screenOpt = getScreenByPoint(m.getScreenX(), m.getScreenY());
-					if (!screenOpt.isPresent()) {
-						return;
-					}
-					Rectangle2D screen = screenOpt.get().getVisualBounds();
+						//				// Aero Snap Top Right Corner
+						//				if (m.getScreenY() <= screen.getMinY() && m.getScreenX() >= screen.getMaxX() - 1) {
+						//					double difference;
+						//					
+						//					//Fix the positioning
+						//					if (wholeScreen.getMaxX() > screen.getMaxX())
+						//						difference = - ( wholeScreen.getWidth() - screen.getWidth() );
+						//					else
+						//						difference =  (wholeScreen.getWidth() - screen.getWidth()-15);
+						//					
+						//					System.out.println(difference);
+						//					
+						//					transparentWindow.getWindow().setX(wholeScreen.getWidth() / 2 + difference);
+						//					transparentWindow.getWindow().setY(screen.getMinY());
+						//					transparentWindow.getWindow().setWidth(screen.getWidth() / 2);
+						//					transparentWindow.getWindow().setHeight(screen.getHeight() / 2);
+						//					
+						//					transparentWindow.show();
+						//				}
+						//				
+						//				// Aero Snap Top Left Corner
+						//				else if (m.getScreenY() <= screen.getMinY() && m.getScreenX() <= screen.getMinX()) {
+						//					
+						//					transparentWindow.getWindow().setX(screen.getMinX());
+						//					transparentWindow.getWindow().setY(screen.getMinY());
+						//					transparentWindow.getWindow().setWidth(screen.getWidth() / 2);
+						//					transparentWindow.getWindow().setHeight(screen.getHeight() / 2);
+						//					
+						//					transparentWindow.show();
+						//				}
+						//				
+						//				// Aero Snap Bottom Right Corner
+						//				else if (m.getScreenY() >= screen.getMaxY() - 1 && m.getScreenX() >= screen.getMaxY()) {
+						//					
+						//					transparentWindow.getWindow().setX(wholeScreen.getWidth() / 2 - ( wholeScreen.getWidth() - screen.getWidth() ));
+						//					transparentWindow.getWindow().setY(wholeScreen.getHeight() / 2 - ( wholeScreen.getHeight() - screen.getHeight() ));
+						//					transparentWindow.getWindow().setWidth(wholeScreen.getWidth() / 2);
+						//					transparentWindow.getWindow().setHeight(wholeScreen.getHeight() / 2);
+						//					
+						//					transparentWindow.show();
+						//				}
+						//				
+						//				// Aero Snap Bottom Left Corner
+						//				else if (m.getScreenY() >= screen.getMaxY() - 1 && m.getScreenX() <= screen.getMinX()) {
+						//					
+						//					transparentWindow.getWindow().setX(screen.getMinX());
+						//					transparentWindow.getWindow().setY(wholeScreen.getHeight() / 2 - ( wholeScreen.getHeight() - screen.getHeight() ));
+						//					transparentWindow.getWindow().setWidth(wholeScreen.getWidth() / 2);
+						//					transparentWindow.getWindow().setHeight(wholeScreen.getHeight() / 2);
+						//					
+						//					transparentWindow.show();
+						//				}
 
-					//----------TO BE ADDED IN FUTURE RELEASE , GAVE ME CANCER implementing them ..----------------
+						// Aero Snap Left.
+						if (m.getScreenX() <= screen.getMinX()) {
+							transparentWindow.getWindow().setY(screen.getMinY());
+							transparentWindow.getWindow().setHeight(screen.getHeight());
 
-					//				// Aero Snap Top Right Corner
-					//				if (m.getScreenY() <= screen.getMinY() && m.getScreenX() >= screen.getMaxX() - 1) {
-					//					double difference;
-					//					
-					//					//Fix the positioning
-					//					if (wholeScreen.getMaxX() > screen.getMaxX())
-					//						difference = - ( wholeScreen.getWidth() - screen.getWidth() );
-					//					else
-					//						difference =  (wholeScreen.getWidth() - screen.getWidth()-15);
-					//					
-					//					System.out.println(difference);
-					//					
-					//					transparentWindow.getWindow().setX(wholeScreen.getWidth() / 2 + difference);
-					//					transparentWindow.getWindow().setY(screen.getMinY());
-					//					transparentWindow.getWindow().setWidth(screen.getWidth() / 2);
-					//					transparentWindow.getWindow().setHeight(screen.getHeight() / 2);
-					//					
-					//					transparentWindow.show();
-					//				}
-					//				
-					//				// Aero Snap Top Left Corner
-					//				else if (m.getScreenY() <= screen.getMinY() && m.getScreenX() <= screen.getMinX()) {
-					//					
-					//					transparentWindow.getWindow().setX(screen.getMinX());
-					//					transparentWindow.getWindow().setY(screen.getMinY());
-					//					transparentWindow.getWindow().setWidth(screen.getWidth() / 2);
-					//					transparentWindow.getWindow().setHeight(screen.getHeight() / 2);
-					//					
-					//					transparentWindow.show();
-					//				}
-					//				
-					//				// Aero Snap Bottom Right Corner
-					//				else if (m.getScreenY() >= screen.getMaxY() - 1 && m.getScreenX() >= screen.getMaxY()) {
-					//					
-					//					transparentWindow.getWindow().setX(wholeScreen.getWidth() / 2 - ( wholeScreen.getWidth() - screen.getWidth() ));
-					//					transparentWindow.getWindow().setY(wholeScreen.getHeight() / 2 - ( wholeScreen.getHeight() - screen.getHeight() ));
-					//					transparentWindow.getWindow().setWidth(wholeScreen.getWidth() / 2);
-					//					transparentWindow.getWindow().setHeight(wholeScreen.getHeight() / 2);
-					//					
-					//					transparentWindow.show();
-					//				}
-					//				
-					//				// Aero Snap Bottom Left Corner
-					//				else if (m.getScreenY() >= screen.getMaxY() - 1 && m.getScreenX() <= screen.getMinX()) {
-					//					
-					//					transparentWindow.getWindow().setX(screen.getMinX());
-					//					transparentWindow.getWindow().setY(wholeScreen.getHeight() / 2 - ( wholeScreen.getHeight() - screen.getHeight() ));
-					//					transparentWindow.getWindow().setWidth(wholeScreen.getWidth() / 2);
-					//					transparentWindow.getWindow().setHeight(wholeScreen.getHeight() / 2);
-					//					
-					//					transparentWindow.show();
-					//				}
+							transparentWindow.getWindow().setX(screen.getMinX());
+							if (screen.getWidth() / 2 < transparentWindow.getWindow().getMinWidth()) {
+								transparentWindow.getWindow().setWidth(transparentWindow.getWindow().getMinWidth());
+							} else {
+								transparentWindow.getWindow().setWidth(screen.getWidth() / 2);
+							}
 
-					// Aero Snap Left.
-					if (m.getScreenX() <= screen.getMinX()) {
-						transparentWindow.getWindow().setY(screen.getMinY());
-						transparentWindow.getWindow().setHeight(screen.getHeight());
-
-						transparentWindow.getWindow().setX(screen.getMinX());
-						if (screen.getWidth() / 2 < transparentWindow.getWindow().getMinWidth()) {
-							transparentWindow.getWindow().setWidth(transparentWindow.getWindow().getMinWidth());
-						} else {
-							transparentWindow.getWindow().setWidth(screen.getWidth() / 2);
+							transparentWindow.show();
 						}
 
-						transparentWindow.show();
-					}
+						// Aero Snap Right.
+						else if (m.getScreenX() >= screen.getMaxX() - 1) {
+							transparentWindow.getWindow().setY(screen.getMinY());
+							transparentWindow.getWindow().setHeight(screen.getHeight());
 
-					// Aero Snap Right.
-					else if (m.getScreenX() >= screen.getMaxX() - 1) {
-						transparentWindow.getWindow().setY(screen.getMinY());
-						transparentWindow.getWindow().setHeight(screen.getHeight());
+							if (screen.getWidth() / 2 < transparentWindow.getWindow().getMinWidth()) {
+								transparentWindow.getWindow().setWidth(transparentWindow.getWindow().getMinWidth());
+							} else {
+								transparentWindow.getWindow().setWidth(screen.getWidth() / 2);
+							}
+							transparentWindow.getWindow().setX(screen.getMaxX() - transparentWindow.getWindow().getWidth());
 
-						if (screen.getWidth() / 2 < transparentWindow.getWindow().getMinWidth()) {
-							transparentWindow.getWindow().setWidth(transparentWindow.getWindow().getMinWidth());
-						} else {
-							transparentWindow.getWindow().setWidth(screen.getWidth() / 2);
+							transparentWindow.show();
 						}
-						transparentWindow.getWindow().setX(screen.getMaxX() - transparentWindow.getWindow().getWidth());
 
-						transparentWindow.show();
+						// Aero Snap Top. || Aero Snap Bottom.
+						else if (m.getScreenY() <= screen.getMinY() || m.getScreenY() >= screen.getMaxY() - 1) {
+
+							transparentWindow.getWindow().setX(screen.getMinX());
+							transparentWindow.getWindow().setY(screen.getMinY());
+							transparentWindow.getWindow().setWidth(screen.getWidth());
+							transparentWindow.getWindow().setHeight(screen.getHeight());
+
+							transparentWindow.show();
+						} else {
+							toCloseWindow = true;
+						}
+
+						//				System.out.println("Mouse Position [ " + m.getScreenX() + "," + m.getScreenY() + " ]")
+						//				System.out.println(" " + screen.getMinX() + "," + screen.getMinY() + " ," + screen.getMaxX() + " ," + screen.getMaxY())
+						//				System.out.println()
 					}
 
-					// Aero Snap Top. || Aero Snap Bottom.
-					else if (m.getScreenY() <= screen.getMinY() || m.getScreenY() >= screen.getMaxY() - 1) {
-
-						transparentWindow.getWindow().setX(screen.getMinX());
-						transparentWindow.getWindow().setY(screen.getMinY());
-						transparentWindow.getWindow().setWidth(screen.getWidth());
-						transparentWindow.getWindow().setHeight(screen.getHeight());
-
-						transparentWindow.show();
-					} else {
-						toCloseWindow = true;
+					if (toCloseWindow) {
+						transparentWindow.close();
 					}
-
-					//				System.out.println("Mouse Position [ " + m.getScreenX() + "," + m.getScreenY() + " ]")
-					//				System.out.println(" " + screen.getMinX() + "," + screen.getMinY() + " ," + screen.getMaxX() + " ," + screen.getMaxY())
-					//				System.out.println()
 				}
-
-				if (toCloseWindow) {
-					transparentWindow.close();
-				}
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
 		});
 
 		// Maximize on double click.
 		node.setOnMouseClicked(m -> {
-			if (snap.get() && (MouseButton.PRIMARY.equals(m.getButton())) && (m.getClickCount() == 2))
-				maximize();
+			try {
+				if (snap.get() && (MouseButton.PRIMARY.equals(m.getButton())) && (m.getClickCount() == 2))
+					maximize();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 		});
 
 		// Aero Snap on release.
 		node.setOnMouseReleased(m -> {
-
 			try {
 				if (!snap.get()) {
 					return;
@@ -511,115 +521,132 @@ public class BorderlessController {
 
 		//Record the previous size and previous point
 		pane.setOnDragDetected((event) -> {
-			prevSize.x = stage.getWidth();
-			prevSize.y = stage.getHeight();
-			prevPos.x = stage.getX();
-			prevPos.y = stage.getY();
+			try {
+				prevSize.x = stage.getWidth();
+				prevSize.y = stage.getHeight();
+				prevPos.x = stage.getX();
+				prevPos.y = stage.getY();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 		});
 
 		pane.setOnMouseDragged(m -> {
-			if (m.isPrimaryButtonDown()) {
-				double width = stage.getWidth();
-				double height = stage.getHeight();
+			try {
+				if (m.isPrimaryButtonDown()) {
+					double width = stage.getWidth();
+					double height = stage.getHeight();
 
-				// Horizontal resize.
-				if (direction.endsWith("left")) {
-					double comingWidth = width - m.getScreenX() + stage.getX();
+					// Horizontal resize.
+					if (direction.endsWith("left")) {
+						double comingWidth = width - m.getScreenX() + stage.getX();
 
-					//Check if it violates minimumWidth
-					if (comingWidth > 0 && comingWidth >= stage.getMinWidth()) {
-						stage.setWidth(stage.getX() - m.getScreenX() + stage.getWidth());
-						stage.setX(m.getScreenX());
-					}
+						//Check if it violates minimumWidth
+						if (comingWidth > 0 && comingWidth >= stage.getMinWidth()) {
+							stage.setWidth(stage.getX() - m.getScreenX() + stage.getWidth());
+							stage.setX(m.getScreenX());
+						}
 
-				} else if (direction.endsWith("right")) {
-					double comingWidth = width + m.getX();
-
-					//Check if it violates
-					if (comingWidth > 0 && comingWidth >= stage.getMinWidth())
-						stage.setWidth(m.getSceneX());
-				}
-
-				// Vertical resize.
-				if (direction.startsWith("top")) {
-					if (snapped) {
-						stage.setHeight(prevSize.y);
-						snapped = false;
-					} else if ((height > stage.getMinHeight()) || (m.getY() < 0)) {
-						stage.setHeight(stage.getY() - m.getScreenY() + stage.getHeight());
-						stage.setY(m.getScreenY());
-					}
-				} else if (direction.startsWith(bottom)) {
-					if (snapped) {
-						stage.setY(prevPos.y);
-						snapped = false;
-					} else {
-						double comingHeight = height + m.getY();
+					} else if (direction.endsWith("right")) {
+						double comingWidth = width + m.getX();
 
 						//Check if it violates
-						if (comingHeight > 0 && comingHeight >= stage.getMinHeight())
-							stage.setHeight(m.getSceneY());
+						if (comingWidth > 0 && comingWidth >= stage.getMinWidth())
+							stage.setWidth(m.getSceneX());
 					}
 
+					// Vertical resize.
+					if (direction.startsWith("top")) {
+						if (snapped) {
+							stage.setHeight(prevSize.y);
+							snapped = false;
+						} else if ((height > stage.getMinHeight()) || (m.getY() < 0)) {
+							stage.setHeight(stage.getY() - m.getScreenY() + stage.getHeight());
+							stage.setY(m.getScreenY());
+						}
+					} else if (direction.startsWith(bottom)) {
+						if (snapped) {
+							stage.setY(prevPos.y);
+							snapped = false;
+						} else {
+							double comingHeight = height + m.getY();
+
+							//Check if it violates
+							if (comingHeight > 0 && comingHeight >= stage.getMinHeight())
+								stage.setHeight(m.getSceneY());
+						}
+
+					}
 				}
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
 		});
 
 		// Record application height and y position.
 		pane.setOnMousePressed(m -> {
-			if ((m.isPrimaryButtonDown()) && (!snapped)) {
-				prevSize.y = stage.getHeight();
-				prevPos.y = stage.getY();
+			try {
+				if ((m.isPrimaryButtonDown()) && (!snapped)) {
+					prevSize.y = stage.getHeight();
+					prevPos.y = stage.getY();
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
-
 		});
 
 		// Aero Snap Resize.
 		pane.setOnMouseReleased(m -> {
-			if ((MouseButton.PRIMARY.equals(m.getButton())) && (!snapped)) {
-				Optional<Screen> screenOpt = getScreenByPoint(m.getScreenX(), m.getScreenY());
-				if (!screenOpt.isPresent()) {
-					return;
-				}
-				Rectangle2D screen = screenOpt.get().getVisualBounds();
+			try {
+				if ((MouseButton.PRIMARY.equals(m.getButton())) && (!snapped)) {
+					Optional<Screen> screenOpt = getScreenByPoint(m.getScreenX(), m.getScreenY());
+					if (!screenOpt.isPresent()) {
+						return;
+					}
+					Rectangle2D screen = screenOpt.get().getVisualBounds();
 
-				if ((stage.getY() <= screen.getMinY()) && (direction.startsWith("top"))) {
-					stage.setHeight(screen.getHeight());
-					stage.setY(screen.getMinY());
-					snapped = true;
-				}
+					if ((stage.getY() <= screen.getMinY()) && (direction.startsWith("top"))) {
+						stage.setHeight(screen.getHeight());
+						stage.setY(screen.getMinY());
+						snapped = true;
+					}
 
-				if ((m.getScreenY() >= screen.getMaxY()) && (direction.startsWith(bottom))) {
-					stage.setHeight(screen.getHeight());
-					stage.setY(screen.getMinY());
-					snapped = true;
+					if ((m.getScreenY() >= screen.getMaxY()) && (direction.startsWith(bottom))) {
+						stage.setHeight(screen.getHeight());
+						stage.setY(screen.getMinY());
+						snapped = true;
+					}
 				}
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
-
 		});
 
 		// Aero Snap resize on double click.
 		pane.setOnMouseClicked(m -> {
-			if ((MouseButton.PRIMARY.equals(m.getButton())) && (m.getClickCount() == 2) && ("top".equals(direction) || bottom.equals(direction))) {
-				Optional<Screen> screenOpt = getScreenByRectangle(stage.getX(), stage.getY(), stage.getWidth() / 2, stage.getHeight() / 2);
-				if (!screenOpt.isPresent()) {
-					return;
-				}
-				Rectangle2D screen = screenOpt.get().getVisualBounds();
+			try {
+				if ((MouseButton.PRIMARY.equals(m.getButton())) && (m.getClickCount() == 2) && ("top".equals(direction) || bottom.equals(direction))) {
+					Optional<Screen> screenOpt = getScreenByRectangle(stage.getX(), stage.getY(), stage.getWidth() / 2, stage.getHeight() / 2);
+					if (!screenOpt.isPresent()) {
+						return;
+					}
+					Rectangle2D screen = screenOpt.get().getVisualBounds();
 
-				if (snapped) {
-					stage.setHeight(prevSize.y);
-					stage.setY(prevPos.y);
-					snapped = false;
-				} else {
-					prevSize.y = stage.getHeight();
-					prevPos.y = stage.getY();
-					stage.setHeight(screen.getHeight());
-					stage.setY(screen.getMinY());
-					snapped = true;
+					if (snapped) {
+						stage.setHeight(prevSize.y);
+						stage.setY(prevPos.y);
+						snapped = false;
+					} else {
+						prevSize.y = stage.getHeight();
+						prevPos.y = stage.getY();
+						stage.setHeight(screen.getHeight());
+						stage.setY(screen.getMinY());
+						snapped = true;
+					}
 				}
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
-
 		});
 	}
 
